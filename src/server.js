@@ -18,15 +18,29 @@ const server = http.createServer(app);
 // http 서버 위에 웹소켓 서버 생성
 const wss = new WebSocket.Server({ server });
 
+// 연결된 소켓들을 각각 배열에 저장
+const sockets = [];
+
 // socket을 로그에 찍음  = socket = 연결된 사람
 // 연결되면 handleConnection 함수 호출
 wss.on("connection", (socket) => {
+  sockets.push(socket);
+  socket["nickname"] = "Anon";
   console.log("브라우저와 연결되었습니다");
   socket.on("close", () => console.log("브라우저와의 연결이 해제되었습니다"));
-  socket.on("message", (message) => {
+  socket.on("message", (msg) => {
+    const message = JSON.parse(msg);
+    switch (message.type) {
+      case "new_message":
+        sockets.forEach((aSocket) =>
+          aSocket.send(`${socket.nickname} :${message.payload}`)
+        );
+      case "nickname": // JSON타입에서 nickname으로 들어온 값을 message의 payload로 지정  (누가 보낸 메세지인지 )
+        socket["nickname"] = message.payload;
+    }
+
     // 디코딩 작업 ( 한글처리 )
-    const decodedMessage = Buffer.from(message, "binary").toString("utf-8");
-    console.log(decodedMessage);
+    //const dMessage = Buffer.from(message, "binary").toString("utf-8");
   });
   socket.send("hello");
 });
