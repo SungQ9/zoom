@@ -1,6 +1,6 @@
 import express from "express";
+import SocketIO from "socket.io";
 import http from "http";
-import WebSocket from "ws";
 
 const app = express();
 
@@ -10,39 +10,57 @@ app.use("/public", express.static(__dirname + "/public"));
 app.get("/", (req, res) => res.render("home"));
 app.get("/*", (req, res) => res.redirect("/")); // 다른 도메인으로 접근시 home으로
 
-const handleListen = () => console.log(`Listening on http://localhost:3000`); // 동일한 포트에서 http 와 ws request 처리 가능
+const httpServer = http.createServer(app);
+// io
+const wsServer = SocketIO(httpServer);
 
-// 같은 서버에서 http,ws 서버 생성
-// http 서버 생성
-const server = http.createServer(app);
-// http 서버 위에 웹소켓 서버 생성
-const wss = new WebSocket.Server({ server });
-
-// 연결된 소켓들을 각각 배열에 저장
-const sockets = [];
-
-// socket을 로그에 찍음  = socket = 연결된 사람
-// 연결되면 handleConnection 함수 호출
-wss.on("connection", (socket) => {
-  sockets.push(socket);
-  socket["nickname"] = "Anon";
-  console.log("브라우저와 연결되었습니다");
-  socket.on("close", () => console.log("브라우저와의 연결이 해제되었습니다"));
-  socket.on("message", (msg) => {
-    const message = JSON.parse(msg);
-    switch (message.type) {
-      case "new_message":
-        sockets.forEach((aSocket) =>
-          aSocket.send(`${socket.nickname} :${message.payload}`)
-        );
-      case "nickname": // JSON타입에서 nickname으로 들어온 값을 message의 payload로 지정  (누가 보낸 메세지인지 )
-        socket["nickname"] = message.payload;
+// 시드와 생성된 방 이름 매치
+function publicRooms() {
+  const {
+    sockets: {
+      adapter: { sids, rooms },
+    },
+  } = wsServer;
+  const publicRooms = [];
+  rooms.forEach((_, key) => {
+    if (sids.get(key) === undefined) {
+      [publicRooms.push(key)];
     }
-
-    // 디코딩 작업 ( 한글처리 )
-    //const dMessage = Buffer.from(message, "binary").toString("utf-8");
   });
-  socket.send("hello");
+  return publicRooms;
+}
+
+// 서버와 연결됐을 떄
+wsServer.on("connection", (socket) => {
+  socket["nickname"] = "Anon";
+  socket.onAny((event) => {
+    console.log(wsServer.sockets.adapter);
+    console.log(`Socket Event${event}`);
+  });
+  // 방에 들어올 때
+  socket.on("enter_room", (roomName, done) => {
+    socket.join(roomName);
+    done();
+    socket.to(roomName).emit("welcome", socket.nickname);
+    wsServer.sockets.emit("room_change", publicRooms());
+  });
+  // 방에 나갔을 때
+  socket.on("disconnecting", () => {
+    socket.rooms.forEach((room) =>
+      socket.to(room).emit("bye", socket.nickname)
+    );
+  });
+  socket.on("disconnect", () => {
+    wsServer.sockets.emit("room_change", publicRooms());
+  });
+  // 메세지 전송 시 대화창
+  socket.on("new_message", (msg, room, done) => {
+    socket.to(room).emit("new_message", `${socket.nickname}:${msg}`);
+    done();
+  });
+  // 닉네임 지정
+  socket.on("nickname", (nickname) => (socket["nickname"] = nickname));
 });
 
-server.listen(3000, handleListen);
+const handleListen = () => console.log(`Listening on http://localhost:3000`); // 동일한 포트에서 http 와 ws request 처리 가능
+httpServer.listen(3000, handleListen);
