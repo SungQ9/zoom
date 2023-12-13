@@ -12,7 +12,6 @@ app.get("/*", (req, res) => res.redirect("/")); // 다른 도메인으로 접근
 
 const handleListen = () => console.log(`Listening on http://localhost:3000`); // 동일한 포트에서 http 와 ws request 처리 가능
 
-/*
 // 같은 서버에서 http,ws 서버 생성
 // http 서버 생성
 const server = http.createServer(app);
@@ -43,6 +42,5 @@ wss.on("connection", (socket) => {
     //const dMessage = Buffer.from(message, "binary").toString("utf-8");
   });
 });
-*/
 
 server.listen(3000, handleListen);

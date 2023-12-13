@@ -1,5 +1,6 @@
 import express from "express";
-import SocketIO from "socket.io";
+import { Server } from "socket.io";
+import { instrument } from "@socket.io/admin-ui";
 import http from "http";
 
 const app = express();
@@ -12,7 +13,16 @@ app.get("/*", (req, res) => res.redirect("/")); // 다른 도메인으로 접근
 
 const httpServer = http.createServer(app);
 // io
-const wsServer = SocketIO(httpServer);
+const wsServer = new Server(httpServer, {
+  cors: {
+    origin: ["hjttps://admin.sokcet.io"],
+    credentials: true,
+  },
+});
+instrument(wsServer, {
+  auth: false,
+  mode: "development",
+});
 
 // 시드와 생성된 방 이름 매치
 function publicRooms() {
@@ -30,6 +40,10 @@ function publicRooms() {
   return publicRooms;
 }
 
+function countRoom(roomName) {
+  return wsServer.sockets.adapter.rooms.get(roomName)?.size;
+}
+
 // 서버와 연결됐을 떄
 wsServer.on("connection", (socket) => {
   socket["nickname"] = "Anon";
@@ -41,13 +55,13 @@ wsServer.on("connection", (socket) => {
   socket.on("enter_room", (roomName, done) => {
     socket.join(roomName);
     done();
-    socket.to(roomName).emit("welcome", socket.nickname);
+    socket.to(roomName).emit("welcome", socket.nickname, countRoom(roomName));
     wsServer.sockets.emit("room_change", publicRooms());
   });
   // 방에 나갔을 때
   socket.on("disconnecting", () => {
     socket.rooms.forEach((room) =>
-      socket.to(room).emit("bye", socket.nickname)
+      socket.to(room).emit("bye", socket.nickname, countRoom(room) - 1)
     );
   });
   socket.on("disconnect", () => {
