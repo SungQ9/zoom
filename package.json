@@ -23,5 +23,5 @@
     "socket.io": "^4.7.2",
     "ws": "^8.15.0"
   },
-  "homepage": "http://sungq9.github.io/Chatapp/"
+  "homepage": "http://sungq9.github.io/zoom/"
 }
